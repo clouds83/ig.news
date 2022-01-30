@@ -17,6 +17,8 @@ type User = {
 export default async (req: NextApiRequest, res: NextApiResponse) => {
 
     if (req.method === 'POST') {
+
+        // Pegando as info da Sessão
         const session = await getSession({ req })
 
         const user = await fauna.query<User>(
@@ -31,6 +33,8 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
         let customerId = user.data.stripe_customer_id
 
         if (!customerId) {
+
+            // Criando um usuário/customer para o Stripe a partir do Usuário logado
             const stripeCustomer = await stripe.customers.create({
                 email: session.user.email,
                 // metadata
@@ -50,8 +54,9 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
             customerId = stripeCustomer.id
         }
         
+        // Criando uma Checkout Session do Stripe
         const stripeCheckoutSession = await stripe.checkout.sessions.create({
-            customer: customerId,
+            customer: customerId, // usuário cadastrado no Stripe
             payment_method_types: ['card'],
             billing_address_collection: 'required',
             line_items: [
