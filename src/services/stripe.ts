@@ -5,7 +5,7 @@ export const stripe = new Stripe(
     {
         apiVersion: '2020-08-27',
         appInfo: {
-            name: 'easy.Gate',
+            name: 'ig.news',
             version: '0.1.0'
         },
     }

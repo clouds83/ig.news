@@ -3,12 +3,13 @@ import { Readable } from "stream";
 import Stripe from "stripe";
 
 import { stripe } from "../../services/stripe";
+import { saveSubscription } from "./_lib/manageSubscriptions";
 
 // Função para pegar todas as info retornadas pouco a pouco, e transformar em um Objeto Buffer 
-async function buffer(readable: Readable){
+async function buffer(readable: Readable) {
     const chunks = []
 
-    for await(const chunk of readable){
+    for await (const chunk of readable) {
         chunks.push(
             typeof chunk === "string" ? Buffer.from(chunk) : chunk
         )
@@ -26,7 +27,12 @@ export const config = {
 }
 
 // Eventos que queremos "ouvir"/atender do Stripe
-const relevantEvents = new Set(["checkout.session.completed"])
+const relevantEvents = new Set([
+    "checkout.session.completed",
+    "customer.subscription.updated",
+    "customer.subscription.deleted",
+
+])
 
 export default async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method == 'POST') {
@@ -35,13 +41,13 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
         const buf = await buffer(req)
 
         // Pega a chave secreta que o Stripe envia, validando que foi a aplicação Stripe que fez a requição
-        const secret = req.headers['stripe-signature'] 
+        const secret = req.headers['stripe-signature']
 
         let event: Stripe.Event
 
-        try{
+        try {
             // Verificando se os parametros batem, e construindo o Objeto de evento
-            event = stripe.webhooks.constructEvent(buf, secret, process.env.STRIPE_WEBHOOK_SECRET)           
+            event = stripe.webhooks.constructEvent(buf, secret, process.env.STRIPE_WEBHOOK_SECRET)
         } catch (err) {
             return res.status(400).send(`Webhook error: ${err.message}`)
         }
@@ -49,8 +55,39 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
         // Pegando o tipo do event retornado pela Aplicação do Stripe ao validar uma compra
         const { type } = event
 
-        if(relevantEvents.has(type)){
-            console.log("Evento Recebido", event)
+        if (relevantEvents.has(type)) {
+
+            try {
+                switch (type) {
+                    case 'customer.subscription.updated':
+                    case 'customer.subscription.deleted':
+                        const subscription = event.data.object as Stripe.Subscription;
+
+                        await saveSubscription(
+                            subscription.id,
+                            subscription.customer.toString(),
+                            false);
+
+                        break;
+
+                    case 'checkout.session.completed':
+
+                        const checkoutSession = event.data.object as Stripe.Checkout.Session
+
+                        await saveSubscription(
+                            checkoutSession.subscription.toString(),
+                            checkoutSession.customer.toString(),
+                            true
+                        );
+
+                        break;
+                    default:
+                        throw new Error('Unhandled event.')
+                }
+            } catch (err) {
+                return res.json({ error: 'Webhook handler failed.' })
+            }
+
         }
 
         res.json({ ok: true })
@@ -60,52 +97,3 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
         res.status(405).end('Method not allowed')
     }
 }
-
-// import { NextApiRequest, NextApiResponse } from "next";
-// import { Readable } from 'stream'
-// import Stripe from "stripe";
-// import { stripe } from "../../services/stripe";
-
-// async function buffer(readable: Readable) {
-//     const chunks = [];
-
-//     for await (const chunk of readable) {
-//         chunks.push(
-//             typeof chunk === "string" ? Buffer.from(chunk) : chunk
-//         );
-//     }
-
-//     return Buffer.concat(chunks);
-// }
-
-// const relevantEvents = new Set([
-//     'checkout.session.completed'
-// ])
-
-// export default async (req: NextApiRequest, res: NextApiResponse) => {
-//     if (req.method === 'POST') {
-//         const buf = await buffer(req)
-//         const secret = req.headers['stripe-signature']
-
-//         let event: Stripe.Event;
-
-//         try {
-//             event = stripe.webhooks.constructEvent(buf, secret, process.env.STRIPE_WEBHOOK_SECRET);
-//         } catch (err) {
-//             console.log(process.env.STRIPE_WEBHOOK_SECRET)
-            
-//             return res.status(400).send(`Webhook error: ${err.message}`);
-//         }
-
-//         const { type } = event;
-
-//         if (relevantEvents.has(type)) {
-//             console.log('Evento recebido', event)
-//         }
-
-//         res.json({ received: true })
-//     } else {
-//         res.setHeader('Allow', 'POST')
-//         res.status(405).end('Method not allowed')
-//     }
-// }

@@ -17,7 +17,7 @@ export default function Home({product}: HomeProps) {
   return (
     <>
       <Head>
-        <title>EasyGate - Monthly subscription for your readers</title>
+        <title>ig.news - Monthly subscription for your readers</title>
       </Head>
 
       <main className={styles.contentContainer}>
@@ -27,7 +27,7 @@ export default function Home({product}: HomeProps) {
           <p>
             Get access to all the publications <br/>
             <span>for {product.amount} monthly</span>
-            <SubscribeButton/>
+            <SubscribeButton priceId={''}/>
           </p>
         </section>
 
